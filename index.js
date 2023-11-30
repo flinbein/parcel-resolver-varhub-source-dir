@@ -111,7 +111,7 @@ module.exports = new Resolver({
 });
 
 function objToSourceCode(obj){
-	if (obj instanceof Buffer) {
+	if (obj instanceof Uint8Array) {
 		return "Uint8Array.of(" + [...obj] + ")";
 	}
 	if (Array.isArray(obj)) {
