@@ -74,11 +74,11 @@ async function fileToJson({path, moduleName}, main) {
 	if (mimeTypes.lookup(path)?.startsWith("text/")){
 		return {type: "text", source: data.toString("utf-8")}
 	}
-	return {type: "bin", source: data};
+	return {type: "bin", source: new Uint8Array(data.buffer, data.byteOffset, data.byteLength)};
 }
 
 module.exports = new Resolver({
-	async resolve({dependency, options, logger, specifier, pipeline, config}) {
+	async resolve({dependency, specifier, pipeline}) {
 		if (pipeline !== "varhub-modules" && pipeline !== "varhub-modules-integrity") return;
 		const [spec, index = null] = specifier.split(":");
 		const sourceFilePath = dependency.resolveFrom ?? dependency.sourcePath;
