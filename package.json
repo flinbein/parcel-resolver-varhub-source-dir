@@ -1,5 +1,5 @@
 {
-  "version": "1.0.4",
+  "version": "1.0.5",
   "name": "@flinbein/parcel-resolver-varhub-source-dir",
   "main": "./index.js",
   "author": "dpohvar@gmail.com",

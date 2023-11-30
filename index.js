@@ -112,7 +112,7 @@ module.exports = new Resolver({
 
 function objToSourceCode(obj){
 	if (obj instanceof Uint8Array) {
-		return "Uint8Array.of(" + [...obj] + ")";
+		return "Uint8Array.from([" + [...obj] + "])";
 	}
 	if (Array.isArray(obj)) {
 		return "[" + obj.map(objToSourceCode).join(",") + "]";
