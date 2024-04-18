@@ -1,7 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const typescript = require("typescript");
-const mimeTypes = require("mime-types");
 const {Resolver} = require("@parcel/plugin");
 const {normalizeSeparators} = require("@parcel/utils");
 const getStableHash = require("@flinbein/json-stable-hash");
@@ -38,15 +37,7 @@ async function readFile(path) {
 async function fileToJson({path, moduleName}, main) {
 	const data = await readFile(path);
 	if (path.endsWith(".json")) {
-		return {type: "json", source: JSON.stringify(JSON.parse(data.toString("utf-8")))}
-	}
-	if (path.endsWith(".js")) {
-		const result = {type: "js", source: data.toString("utf-8")}
-		if (moduleName === "main") {
-			result.evaluate = true;
-			result.hooks = "*"
-		}
-		return result;
+		return JSON.stringify(JSON.parse(data.toString("utf-8")));
 	}
 	if (path.endsWith(".ts") || path.endsWith(".mts")) {
 
@@ -64,35 +55,48 @@ async function fileToJson({path, moduleName}, main) {
 				fileName: path,
 			},
 		);
-		const result = {type: "js", source: outputText}
-		if (moduleName === main) {
-			result.evaluate = true;
-			result.hooks = "*";
-		}
-		return result;
+		return outputText;
 	}
-	if (mimeTypes.lookup(path)?.startsWith("text/")){
-		return {type: "text", source: data.toString("utf-8")}
-	}
-	return {type: "bin", source: new Uint8Array(data.buffer, data.byteOffset, data.byteLength)};
+	return data.toString("utf-8");
+}
+
+function fixFileName(path){
+	return path.replace(/\.t(sx?)$/, ".j$1").replace(/\.mts$/, ".mjs");
 }
 
 module.exports = new Resolver({
 	async resolve({dependency, specifier, pipeline}) {
 		if (pipeline !== "varhub-modules" && pipeline !== "varhub-modules-integrity") return;
-		const [spec, index = null] = specifier.split(":");
+		const [spec, ...opts] = specifier.split(":");
+		const index = opts.length > 0 ? opts.join(":") : null;
+		// todo: help text
 		const sourceFilePath = dependency.resolveFrom ?? dependency.sourcePath;
 
 		const modulesRootDir = path.join(sourceFilePath, "..", spec, "/");
-		const fileLocations = await getFileLocations(modulesRootDir, "/");
-		const modules = {};
-		await Promise.all(fileLocations.map(async (fl) => modules[fl.moduleName] = await fileToJson(fl, index)));
-		const integrity = getStableHash(modules, "sha256", "hex");
+		const fileLocations = await getFileLocations(modulesRootDir, "");
+		if (fileLocations.length === 0) {
+			throw new Error(`wrong specifier "varhub-modules:${specifier}": directory is empty"`);
+		}
+		if (index === null) {
+			const fixedName = fuzzyFind("index.ts", fileLocations.map(fl => fl.moduleName));
+			throw new Error(`main file is not defined in specifier "${pipeline}:${specifier}". Did you mean "${pipeline}:${spec}:${fixedName}"?`);
+		}
+
+		const main = fixFileName(index);
+		if (!fileLocations.some((fl) => fixFileName(fl.moduleName) === main)) {
+			const fixedName = fuzzyFind(index, fileLocations.map(fl => fl.moduleName));
+			throw new Error(`wrong main file "${index}" in specifier "${pipeline}:${specifier}". Did you mean "${pipeline}:${spec}:${fixedName}"?`);
+		}
+
+		const source = {};
+		const module = { main, source };
+		await Promise.all(fileLocations.map(async (fl) => source[fixFileName(fl.moduleName)] = await fileToJson(fl, index)));
+		const integrity = getStableHash(module, "sha256", "hex");
 
 		if (pipeline === "varhub-modules") {
 			return {
 				filePath: path.join(modulesRootDir, `.varhub-modules.${btoa(index ?? "")}.js`),
-				code: `export const integrity=${JSON.stringify(integrity)};export const modules=${objToSourceCode(modules)};`,
+				code: `export const roomIntegrity=${JSON.stringify(integrity)};export const roomModule=${objToSourceCode(module)};`,
 				invalidateOnFileCreate: [{glob: normalizeSeparators(modulesRootDir)+"**/*"}],
 				invalidateOnFileChange: fileLocations.map(d=>d.path),
 				pipeline: null,
@@ -123,4 +127,44 @@ function objToSourceCode(obj){
 		)).join(",")}}`
 	}
 	return JSON.stringify(obj);
+}
+
+function fuzzyFind(str, options){
+	let result = undefined, level = Infinity;
+	for (let option of options) {
+		const dist = levenshteinDistance(str, option);
+		if (dist < level) {
+			result = option;
+			level = dist;
+		}
+	}
+	return result;
+}
+
+function levenshteinDistance(str1, str2) {
+	const len1 = str1.length;
+	const len2 = str2.length;
+
+	let matrix = Array(len1 + 1);
+	for (let i = 0; i <= len1; i++) matrix[i] = Array(len2 + 1);
+
+	for (let i = 0; i <= len1; i++) matrix[i][0] = i;
+
+	for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+
+	for (let i = 1; i <= len1; i++) {
+		for (let j = 1; j <= len2; j++) {
+			if (str1[i - 1] === str2[j - 1]) {
+				matrix[i][j] = matrix[i - 1][j - 1];
+			} else {
+				matrix[i][j] = Math.min(
+					matrix[i - 1][j] + 1,
+					matrix[i][j - 1] + 1,
+					matrix[i - 1][j - 1] + 1
+				);
+			}
+		}
+	}
+
+	return matrix[len1][len2];
 }

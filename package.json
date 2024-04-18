@@ -1,13 +1,17 @@
 {
-  "version": "1.0.5",
+  "version": "2.0.0",
   "name": "@flinbein/parcel-resolver-varhub-source-dir",
   "main": "./index.js",
   "author": "dpohvar@gmail.com",
   "dependencies": {
-    "mime-types": "^2.1.35",
-    "typescript": "^5.3.2",
-    "@parcel/plugin": "^2.10.3",
-    "@parcel/utils": "^2.10.3",
     "@flinbein/json-stable-hash": "git+https://github.com/flinbein/json-stable-hash#1.0.4"
+  },
+  "peerDependencies": {
+    "typescript": "^5.4.5",
+    "@parcel/plugin": "^2.12.0",
+    "@parcel/utils": "^2.12.0"
+  },
+  "engines": {
+    "parcel": "2.x"
   }
 }
